@@ -1,5 +1,14 @@
 const BASE_URL = '';
 
+// Get auth token from localStorage or environment
+function getAuthHeaders() {
+  const token = localStorage.getItem('devtodo-api-token');
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
+}
+
 async function handleResponse(response) {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -27,14 +36,16 @@ export const api = {
 
     const query = params.toString();
     const url = query ? `/api/tasks?${query}` : '/api/tasks';
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   async createTask(task) {
     const response = await fetch('/api/tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(task),
     });
     return handleResponse(response);
@@ -43,7 +54,7 @@ export const api = {
   async updateTask(id, updates) {
     const response = await fetch(`/api/tasks/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(updates),
     });
     return handleResponse(response);
@@ -52,54 +63,70 @@ export const api = {
   async deleteTask(id) {
     const response = await fetch(`/api/tasks/${id}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
     return handleResponse(response);
   },
 
   // Docker
   async getContainers() {
-    const response = await fetch('/api/docker/containers');
+    const response = await fetch('/api/docker/containers', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   async performContainerAction(id, action) {
     const response = await fetch(`/api/docker/containers/${id}/${action}`, {
       method: 'POST',
+      headers: getAuthHeaders(),
     });
     return handleResponse(response);
   },
 
   async getDockerActions() {
-    const response = await fetch('/api/docker/actions');
+    const response = await fetch('/api/docker/actions', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   // Calendar
   async getCalendarAuthUrl() {
-    const response = await fetch('/api/calendar/auth');
+    const response = await fetch('/api/calendar/auth', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   async getCalendarEvents() {
-    const response = await fetch('/api/calendar/events');
+    const response = await fetch('/api/calendar/events', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   // Gmail
   async getGmailActions() {
-    const response = await fetch('/api/gmail/actions');
+    const response = await fetch('/api/gmail/actions', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   // Claude
   async getClaudeActions() {
-    const response = await fetch('/api/claude/actions');
+    const response = await fetch('/api/claude/actions', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
   // Health
   async getHealth() {
-    const response = await fetch('/api/health');
+    const response = await fetch('/api/health', {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(response);
   },
 
@@ -107,9 +134,18 @@ export const api = {
   async exportMarkdown(tasks, date) {
     const response = await fetch('/api/export/markdown', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ tasks, date }),
     });
     return handleResponse(response);
+  },
+
+  // Set auth token
+  setToken(token) {
+    if (token) {
+      localStorage.setItem('devtodo-api-token', token);
+    } else {
+      localStorage.removeItem('devtodo-api-token');
+    }
   },
 };

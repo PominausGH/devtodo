@@ -5,6 +5,8 @@ describe('API Service', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     global.fetch = vi.fn();
+    // Clear any stored token
+    localStorage.removeItem('devtodo-api-token');
   });
 
   it('getTasks fetches from /api/tasks', async () => {
@@ -16,7 +18,7 @@ describe('API Service', () => {
 
     const tasks = await api.getTasks();
 
-    expect(fetch).toHaveBeenCalledWith('/api/tasks');
+    expect(fetch).toHaveBeenCalledWith('/api/tasks', { headers: {} });
     expect(tasks).toEqual(mockTasks);
   });
 
@@ -63,6 +65,7 @@ describe('API Service', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/tasks/1', {
       method: 'DELETE',
+      headers: {},
     });
   });
 
@@ -74,5 +77,19 @@ describe('API Service', () => {
     });
 
     await expect(api.getTasks()).rejects.toThrow('Server error');
+  });
+
+  it('includes auth header when token is set', async () => {
+    localStorage.setItem('devtodo-api-token', 'my-secret-token');
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+
+    await api.getTasks();
+
+    expect(fetch).toHaveBeenCalledWith('/api/tasks', {
+      headers: { Authorization: 'Bearer my-secret-token' },
+    });
   });
 });

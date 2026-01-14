@@ -11,6 +11,7 @@ const chokidar = require('chokidar');
 
 const { createDb } = require('./db');
 const createTasksRouter = require('./routes/tasks');
+const { authMiddleware } = require('./middleware/auth');
 
 const app = express();
 
@@ -59,6 +60,9 @@ const dockerLimiter = rateLimit({
   max: 10, // 10 requests per minute
   message: { error: 'Too many Docker actions, please wait' },
 });
+
+// Auth middleware - protects all /api routes
+app.use('/api/', authMiddleware);
 
 // Mount task routes
 app.use('/api/tasks', createTasksRouter(db));
