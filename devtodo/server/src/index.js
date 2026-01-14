@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { Docker } = require('dockerode');
+const Docker = require('dockerode');
 const { google } = require('googleapis');
 const fs = require('fs').promises;
 const path = require('path');
