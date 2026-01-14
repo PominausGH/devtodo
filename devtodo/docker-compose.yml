@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # Frontend - React App
   frontend:
     build:
       context: .
@@ -14,7 +13,6 @@ services:
       - devtodo-network
     restart: unless-stopped
 
-  # Backend - Node.js API
   backend:
     build:
       context: ./server
@@ -24,15 +22,16 @@ services:
     volumes:
       # Mount Docker socket for container management
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Mount Claude chats folder (adjust path as needed)
+      # Mount Claude chats folder
       - ${CLAUDE_CHATS_PATH:-~/.config/claude/chats}:/app/claude-chats:ro
-      # Persist Google tokens
-      - devtodo-tokens:/app/tokens
+      # Persist data (database and tokens)
+      - devtodo-data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3001
       - DOCKER_SOCKET=/var/run/docker.sock
       - CLAUDE_CHATS_PATH=/app/claude-chats
+      - DATA_DIR=/app/data
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:3001/auth/google/callback}
@@ -45,4 +44,4 @@ networks:
     driver: bridge
 
 volumes:
-  devtodo-tokens:
+  devtodo-data:
