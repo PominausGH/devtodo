@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  CheckCircle2, Circle, Plus, Calendar, Mail, Server, 
+import {
+  CheckCircle2, Circle, Plus, Calendar, Mail, Server,
   MessageSquare, Download, Settings, RefreshCw, Trash2,
   Clock, Tag, AlertCircle, ChevronDown, ChevronRight,
   Container, FileText, ExternalLink, Edit2, Save, X,
   Loader2, CheckCheck, Filter, Sun, Moon, Zap
 } from 'lucide-react';
+import { api } from './api';
 
 // Configuration - Update these for your setup
 const CONFIG = {
@@ -16,25 +17,6 @@ const CONFIG = {
   gmailApiEndpoint: '/api/gmail'
 };
 
-// Mock data for demonstration - replace with actual API calls
-const mockDockerContainers = [
-  { id: 'cv-matcher', name: 'cv-matcher', status: 'running', lastAction: 'restarted', timestamp: new Date().toISOString() },
-  { id: 'litellm', name: 'litellm', status: 'running', lastAction: 'deployed', timestamp: new Date(Date.now() - 3600000).toISOString() },
-  { id: 'open-webui', name: 'open-webui', status: 'running', lastAction: 'updated', timestamp: new Date(Date.now() - 7200000).toISOString() },
-  { id: 'timerforge', name: 'timerforge', status: 'stopped', lastAction: 'stopped', timestamp: new Date(Date.now() - 86400000).toISOString() },
-  { id: 'nginx-proxy', name: 'nginx-proxy-manager', status: 'running', lastAction: 'ssl-renewed', timestamp: new Date(Date.now() - 172800000).toISOString() },
-];
-
-const mockCalendarEvents = [
-  { id: 'cal1', title: 'Code review session', start: new Date(Date.now() + 3600000).toISOString(), end: new Date(Date.now() + 7200000).toISOString() },
-  { id: 'cal2', title: 'Deploy escape-call update', start: new Date(Date.now() + 86400000).toISOString(), allDay: true },
-  { id: 'cal3', title: 'Yin yoga class', start: new Date(Date.now() + 172800000).toISOString(), end: new Date(Date.now() + 176400000).toISOString() },
-];
-
-const mockEmails = [
-  { id: 'email1', subject: 'RE: Automation consulting proposal', from: 'client@example.com', hasAction: true, actionText: 'Review and respond to proposal feedback' },
-  { id: 'email2', subject: 'Docker MCP integration docs', from: 'dev@anthropic.com', hasAction: true, actionText: 'Test MCP server configuration' },
-];
 
 // Task source types
 const SOURCE_TYPES = {
@@ -196,22 +178,23 @@ export default function DevTodo() {
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [emailActions, setEmailActions] = useState([]);
 
-  // Load tasks from localStorage on mount
+  // Load tasks from API on mount
   useEffect(() => {
-    const savedTasks = localStorage.getItem('devtodo-tasks');
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
-    }
+    const loadTasks = async () => {
+      try {
+        const tasks = await api.getTasks();
+        setTasks(tasks);
+      } catch (error) {
+        console.error('Failed to load tasks:', error);
+      }
+    };
+    loadTasks();
+
     const savedDarkMode = localStorage.getItem('devtodo-darkmode');
     if (savedDarkMode !== null) {
       setDarkMode(JSON.parse(savedDarkMode));
     }
   }, []);
-
-  // Save tasks to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem('devtodo-tasks', JSON.stringify(tasks));
-  }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem('devtodo-darkmode', JSON.stringify(darkMode));
@@ -221,38 +204,86 @@ export default function DevTodo() {
   const syncAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      // In production, these would be actual API calls
-      // For now, using mock data
-      setDockerContainers(mockDockerContainers);
-      setCalendarEvents(mockCalendarEvents);
-      setEmailActions(mockEmails);
-      
-      // Auto-complete Docker tasks based on container status
-      setTasks(prevTasks => {
-        return prevTasks.map(task => {
-          if (task.source === SOURCE_TYPES.DOCKER && !task.completed) {
-            const container = mockDockerContainers.find(c => 
+      // Fetch tasks from API
+      const tasksData = await api.getTasks();
+      setTasks(tasksData);
+
+      // Fetch Docker containers
+      try {
+        const containers = await api.getContainers();
+        setDockerContainers(containers);
+
+        // Check for auto-completable tasks
+        const dockerActions = await api.getDockerActions();
+
+        // Auto-complete logic
+        for (const task of tasksData) {
+          if (task.source === 'docker' && !task.completed) {
+            const container = containers.find(c =>
               task.title.toLowerCase().includes(c.name.toLowerCase()) ||
               task.dockerContainerId === c.id
             );
+
             if (container) {
-              const actionCompleted = 
-                (task.title.toLowerCase().includes('restart') && container.lastAction === 'restarted') ||
-                (task.title.toLowerCase().includes('deploy') && container.lastAction === 'deployed') ||
-                (task.title.toLowerCase().includes('update') && container.lastAction === 'updated') ||
-                (task.title.toLowerCase().includes('stop') && container.status === 'stopped') ||
-                (task.title.toLowerCase().includes('start') && container.status === 'running') ||
-                (task.title.toLowerCase().includes('ssl') && container.lastAction === 'ssl-renewed');
-              
-              if (actionCompleted && new Date(container.timestamp) > new Date(task.createdAt)) {
-                return { ...task, completed: true, completedAt: container.timestamp, autoCompleted: true };
+              const action = dockerActions.find(a => a.containerId === container.id);
+              if (action) {
+                const actionCompleted =
+                  (task.title.toLowerCase().includes('restart') && action.action === 'restart') ||
+                  (task.title.toLowerCase().includes('stop') && container.status === 'exited') ||
+                  (task.title.toLowerCase().includes('start') && container.status === 'running');
+
+                if (actionCompleted && new Date(action.timestamp) > new Date(task.createdAt)) {
+                  await api.updateTask(task.id, {
+                    completed: true,
+                    autoCompleted: true
+                  });
+                }
               }
             }
           }
-          return task;
-        });
-      });
-      
+        }
+
+        // Refresh tasks after auto-completion
+        const updatedTasks = await api.getTasks();
+        setTasks(updatedTasks);
+      } catch (dockerError) {
+        console.warn('Docker not available:', dockerError.message);
+        setDockerContainers([]);
+      }
+
+      // Fetch Calendar events
+      try {
+        const { events } = await api.getCalendarEvents();
+        setCalendarEvents(events || []);
+      } catch (calError) {
+        if (calError.message.includes('Not authenticated')) {
+          setCalendarEvents([]);
+        } else {
+          console.warn('Calendar error:', calError.message);
+        }
+      }
+
+      // Fetch Gmail actions
+      try {
+        const { emails } = await api.getGmailActions();
+        setEmailActions(emails || []);
+      } catch (gmailError) {
+        if (gmailError.message.includes('Not authenticated')) {
+          setEmailActions([]);
+        } else {
+          console.warn('Gmail error:', gmailError.message);
+        }
+      }
+
+      // Fetch Claude actions
+      try {
+        const { actions } = await api.getClaudeActions();
+        setClaudeActions(actions || []);
+      } catch (claudeError) {
+        console.warn('Claude chats error:', claudeError.message);
+        setClaudeActions([]);
+      }
+
       setLastSync(new Date());
     } catch (error) {
       console.error('Sync failed:', error);
@@ -269,50 +300,62 @@ export default function DevTodo() {
   }, [syncAll]);
 
   // Add task
-  const addTask = (taskData) => {
-    const task = {
-      id: generateId(),
-      title: taskData.title,
-      completed: false,
-      priority: taskData.priority || 'medium',
-      source: taskData.source || SOURCE_TYPES.MANUAL,
-      createdAt: new Date().toISOString(),
-      dueDate: taskData.dueDate || null,
-      notes: taskData.notes || '',
-      dockerContainerId: taskData.dockerContainerId || null,
-      calendarEventId: taskData.calendarEventId || null,
-      emailId: taskData.emailId || null
-    };
-    setTasks(prev => [task, ...prev]);
-    setShowAddTask(false);
-    setNewTask({ title: '', priority: 'medium', dueDate: '', notes: '' });
+  const addTask = async (taskData) => {
+    try {
+      const task = await api.createTask({
+        title: taskData.title,
+        priority: taskData.priority || 'medium',
+        source: taskData.source || 'manual',
+        dueDate: taskData.dueDate || null,
+        notes: taskData.notes || '',
+        dockerContainerId: taskData.dockerContainerId || null,
+        calendarEventId: taskData.calendarEventId || null,
+        emailId: taskData.emailId || null,
+      });
+      setTasks(prev => [task, ...prev]);
+      setShowAddTask(false);
+      setNewTask({ title: '', priority: 'medium', dueDate: '', notes: '' });
+    } catch (error) {
+      console.error('Failed to create task:', error);
+    }
   };
 
   // Toggle task completion
-  const toggleTask = (taskId) => {
-    setTasks(prev => prev.map(task => {
-      if (task.id === taskId) {
-        return {
-          ...task,
-          completed: !task.completed,
-          completedAt: !task.completed ? new Date().toISOString() : null
-        };
-      }
-      return task;
-    }));
+  const toggleTask = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    try {
+      const updated = await api.updateTask(taskId, {
+        completed: !task.completed,
+      });
+      setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
+    } catch (error) {
+      console.error('Failed to toggle task:', error);
+    }
   };
 
   // Delete task
-  const deleteTask = (taskId) => {
-    setTasks(prev => prev.filter(task => task.id !== taskId));
+  const deleteTask = async (taskId) => {
+    try {
+      await api.deleteTask(taskId);
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
   };
 
   // Update task
-  const updateTask = (taskId, updates) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId ? { ...task, ...updates } : task
-    ));
-    setEditingTask(null);
+  const updateTask = async (taskId, updates) => {
+    try {
+      const updated = await api.updateTask(taskId, updates);
+      setTasks(prev => prev.map(task =>
+        task.id === taskId ? updated : task
+      ));
+      setEditingTask(null);
+    } catch (error) {
+      console.error('Failed to update task:', error);
+    }
   };
 
   // Import from source
@@ -375,15 +418,19 @@ export default function DevTodo() {
     todayCompleted: tasks.filter(t => t.completed && t.completedAt && isToday(t.completedAt)).length
   };
 
-  const handleExport = () => {
-    const { content, filename } = exportToMarkdown(tasks);
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async () => {
+    try {
+      const { content, filename } = await api.exportMarkdown(tasks);
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
   };
 
   // Theme styles
