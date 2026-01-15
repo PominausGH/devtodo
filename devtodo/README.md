@@ -2,7 +2,7 @@
 
 **Infrastructure-Aware Task Manager for Developers**
 
-A unique todo list application that automatically detects completed tasks by monitoring your Docker containers, parses Claude/Claude Code chat histories for action items, syncs with Google Calendar, imports tasks from Gmail, and exports daily reports to Markdown.
+A unique todo list application that automatically detects completed tasks by monitoring your Docker containers and git commits, parses Claude/Claude Code chat histories for action items, syncs with Google Calendar, imports tasks from Gmail, and exports daily reports to Markdown.
 
 ![DevTodo Screenshot](screenshot.png)
 
@@ -21,6 +21,14 @@ A unique todo list application that automatically detects completed tasks by mon
 - One-click task creation for container actions (restart, stop, update, check logs)
 - **Auto-completion detection**: Tasks like "restart cv-matcher container" automatically complete when Docker detects the container was restarted
 - Container health monitoring and stats
+
+#### 🔀 Git Commit Auto-Completion
+- Install a post-commit hook in any git repository
+- Tasks auto-complete when commit messages match task titles
+- Case-insensitive substring matching (commit "Fix login bug" completes task "fix login bug")
+- Multiple tasks can match a single commit
+- Tracks connected repositories with last commit timestamps
+- Shows commit details (hash, branch, repo) on completed tasks
 
 #### 🤖 Claude Chat Parsing
 - Scans your Claude and Claude Code saved chats folder
@@ -57,7 +65,7 @@ A unique todo list application that automatically detects completed tasks by mon
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/devtodo.git
+git clone https://github.com/PominausGH/devtodo.git
 cd devtodo
 ```
 
@@ -136,6 +144,32 @@ Common paths:
 - **Claude Code**: `~/.config/claude-code/chats`
 - **Custom**: Any folder containing `.json`, `.md`, or `.txt` chat exports
 
+### Git Commit Integration
+
+Enable auto-completion of tasks when you make git commits:
+
+1. Add the API token to your shell profile (`~/.bashrc` or `~/.zshrc`):
+```bash
+export DEVTODO_TOKEN=your-api-token
+export DEVTODO_URL=http://localhost:3001  # optional, defaults to localhost
+```
+
+2. Install the post-commit hook in your repository:
+```bash
+cd /path/to/your/repo
+curl -s http://localhost:3001/api/git/hook-script > .git/hooks/post-commit
+chmod +x .git/hooks/post-commit
+```
+
+3. Create a task and make a commit with matching text:
+```bash
+# Task: "fix login validation"
+git commit -m "fix login validation and add tests"
+# Task auto-completes!
+```
+
+The hook runs asynchronously and won't slow down your commits. If DevTodo is unavailable, commits proceed normally.
+
 ### Google Calendar & Gmail
 
 1. Create a Google Cloud Project
@@ -154,6 +188,8 @@ GOOGLE_CLIENT_SECRET=your-client-secret
 
 DevTodo automatically marks tasks as complete based on real-world actions:
 
+### Docker Auto-Completion
+
 | Task Title Contains | Auto-completes When |
 |---------------------|---------------------|
 | "restart [container]" | Container restart detected |
@@ -166,7 +202,16 @@ DevTodo automatically marks tasks as complete based on real-world actions:
 Example:
 1. You add task: "restart litellm container"
 2. You run `docker restart litellm`
-3. DevTodo detects the restart and auto-completes the task ✨
+3. DevTodo detects the restart and auto-completes the task
+
+### Git Auto-Completion
+
+Any task whose title appears in a commit message (case-insensitive) will auto-complete.
+
+Example:
+1. You add task: "fix login validation"
+2. You commit: `git commit -m "fix login validation and add unit tests"`
+3. DevTodo auto-completes the task with commit metadata (hash, branch, repo)
 
 ## 📊 Markdown Export Format
 
@@ -242,6 +287,12 @@ devtodo/
 - `GET /api/calendar/events` - Get calendar events
 - `GET /api/gmail/actions` - Get actionable emails
 
+### Git
+- `POST /api/git/commit` - Receive commit from hook (matches tasks, marks complete)
+- `GET /api/git/repos` - List connected repositories
+- `GET /api/git/hook-script` - Get installable post-commit hook (public, no auth)
+- `DELETE /api/git/repos/:name` - Remove a repository from tracking
+
 ### Export
 - `POST /api/export/markdown` - Generate markdown export
 
@@ -256,7 +307,7 @@ ssh user@daintytrading.com
 
 2. Clone and deploy:
 ```bash
-git clone https://github.com/yourusername/devtodo.git
+git clone https://github.com/PominausGH/devtodo.git
 cd devtodo
 docker-compose up -d
 ```
@@ -275,7 +326,7 @@ docker-compose up -d
 
 ## 🛣️ Roadmap
 
-- [ ] Git commit integration (auto-complete coding tasks)
+- [x] Git commit integration (auto-complete coding tasks)
 - [ ] n8n workflow trigger integration
 - [ ] Mobile app (React Native)
 - [ ] Team collaboration features
