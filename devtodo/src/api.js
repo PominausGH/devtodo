@@ -122,6 +122,26 @@ export const api = {
     return handleResponse(response);
   },
 
+  // Git
+  async getGitRepos() {
+    const response = await fetch('/api/git/repos', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async deleteGitRepo(name) {
+    const response = await fetch(`/api/git/repos/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getHookScriptUrl() {
+    return `${window.location.origin}/api/git/hook-script`;
+  },
+
   // Health
   async getHealth() {
     const response = await fetch('/api/health', {

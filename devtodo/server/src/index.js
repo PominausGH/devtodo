@@ -11,6 +11,7 @@ const chokidar = require('chokidar');
 
 const { createDb } = require('./db');
 const createTasksRouter = require('./routes/tasks');
+const createGitRouter = require('./routes/git');
 const { authMiddleware } = require('./middleware/auth');
 
 const app = express();
@@ -66,6 +67,9 @@ app.use('/api/', authMiddleware);
 
 // Mount task routes
 app.use('/api/tasks', createTasksRouter(db));
+
+// Mount git routes
+app.use('/api/git', createGitRouter(db));
 
 // Initialize Docker client
 let docker;

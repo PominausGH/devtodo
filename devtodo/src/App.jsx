@@ -4,7 +4,8 @@ import {
   MessageSquare, Download, Settings, RefreshCw, Trash2,
   Clock, Tag, AlertCircle, ChevronDown, ChevronRight,
   Container, FileText, ExternalLink, Edit2, Save, X,
-  Loader2, CheckCheck, Filter, Sun, Moon, Zap
+  Loader2, CheckCheck, Filter, Sun, Moon, Zap, GitBranch,
+  Copy, Check
 } from 'lucide-react';
 import { api } from './api';
 
@@ -24,7 +25,8 @@ const SOURCE_TYPES = {
   DOCKER: 'docker',
   CLAUDE: 'claude',
   CALENDAR: 'calendar',
-  GMAIL: 'gmail'
+  GMAIL: 'gmail',
+  GIT: 'git'
 };
 
 const SOURCE_ICONS = {
@@ -32,7 +34,8 @@ const SOURCE_ICONS = {
   [SOURCE_TYPES.DOCKER]: Container,
   [SOURCE_TYPES.CLAUDE]: MessageSquare,
   [SOURCE_TYPES.CALENDAR]: Calendar,
-  [SOURCE_TYPES.GMAIL]: Mail
+  [SOURCE_TYPES.GMAIL]: Mail,
+  [SOURCE_TYPES.GIT]: GitBranch
 };
 
 const SOURCE_COLORS = {
@@ -40,7 +43,8 @@ const SOURCE_COLORS = {
   [SOURCE_TYPES.DOCKER]: '#0ea5e9',
   [SOURCE_TYPES.CLAUDE]: '#f97316',
   [SOURCE_TYPES.CALENDAR]: '#22c55e',
-  [SOURCE_TYPES.GMAIL]: '#ef4444'
+  [SOURCE_TYPES.GMAIL]: '#ef4444',
+  [SOURCE_TYPES.GIT]: '#a855f7'
 };
 
 // Utility functions
@@ -112,9 +116,13 @@ const exportToMarkdown = (tasks, date = new Date()) => {
       const sourceIcon = task.source === SOURCE_TYPES.DOCKER ? '🐳' :
                         task.source === SOURCE_TYPES.CLAUDE ? '🤖' :
                         task.source === SOURCE_TYPES.CALENDAR ? '📅' :
-                        task.source === SOURCE_TYPES.GMAIL ? '📧' : '✏️';
+                        task.source === SOURCE_TYPES.GMAIL ? '📧' :
+                        task.source === SOURCE_TYPES.GIT ? '🔀' : '✏️';
       md += `- [x] ${sourceIcon} ${task.title}`;
       if (task.completedAt) md += ` _(completed ${formatTime(task.completedAt)})_`;
+      if (task.completedBy === 'git' && task.gitCommitHash) {
+        md += ` _(commit ${task.gitCommitHash})_`;
+      }
       md += `\n`;
       if (task.notes) md += `  > ${task.notes}\n`;
     });
@@ -129,7 +137,8 @@ const exportToMarkdown = (tasks, date = new Date()) => {
       const sourceIcon = task.source === SOURCE_TYPES.DOCKER ? '🐳' :
                         task.source === SOURCE_TYPES.CLAUDE ? '🤖' :
                         task.source === SOURCE_TYPES.CALENDAR ? '📅' :
-                        task.source === SOURCE_TYPES.GMAIL ? '📧' : '✏️';
+                        task.source === SOURCE_TYPES.GMAIL ? '📧' :
+                        task.source === SOURCE_TYPES.GIT ? '🔀' : '✏️';
       const priority = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟡' : '🟢';
       md += `- [ ] ${priority} ${sourceIcon} ${task.title}\n`;
       if (task.dueDate) md += `  Due: ${formatDate(task.dueDate)}\n`;
@@ -171,12 +180,15 @@ export default function DevTodo() {
     docker: true,
     claude: true,
     calendar: true,
-    gmail: true
+    gmail: true,
+    git: true
   });
   const [dockerContainers, setDockerContainers] = useState([]);
   const [claudeActions, setClaudeActions] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [emailActions, setEmailActions] = useState([]);
+  const [gitRepos, setGitRepos] = useState([]);
+  const [copiedText, setCopiedText] = useState(null);
 
   // Load tasks from API on mount
   useEffect(() => {
@@ -282,6 +294,15 @@ export default function DevTodo() {
       } catch (claudeError) {
         console.warn('Claude chats error:', claudeError.message);
         setClaudeActions([]);
+      }
+
+      // Fetch Git repos
+      try {
+        const { repos } = await api.getGitRepos();
+        setGitRepos(repos || []);
+      } catch (gitError) {
+        console.warn('Git repos error:', gitError.message);
+        setGitRepos([]);
       }
 
       setLastSync(new Date());
@@ -394,6 +415,43 @@ export default function DevTodo() {
         emailId: email.id
       });
     }
+  };
+
+  // Delete git repo
+  const deleteGitRepo = async (name) => {
+    try {
+      await api.deleteGitRepo(name);
+      setGitRepos(prev => prev.filter(r => r.name !== name));
+    } catch (error) {
+      console.error('Failed to delete git repo:', error);
+    }
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = async (text, id) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedText(id);
+      setTimeout(() => setCopiedText(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  // Get relative time
+  const getRelativeTime = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays === 1) return 'yesterday';
+    return `${diffDays} days ago`;
   };
 
   // Filter tasks
@@ -796,6 +854,154 @@ export default function DevTodo() {
                 }}>
                   {CONFIG.claudeChatsPath}
                 </code>
+              </div>
+            )}
+          </div>
+
+          {/* Git Integration */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <button
+              onClick={() => setExpandedSections(prev => ({ ...prev, git: !prev.git }))}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                width: '100%',
+                padding: '0.5rem',
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: theme.text,
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 600
+              }}
+            >
+              {expandedSections.git ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <GitBranch size={16} color={SOURCE_COLORS[SOURCE_TYPES.GIT]} />
+              Git Integration
+              <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: theme.textSecondary }}>
+                {gitRepos.length}
+              </span>
+            </button>
+            {expandedSections.git && (
+              <div style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
+                {/* Connected repos */}
+                {gitRepos.length > 0 && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <p style={{ fontSize: '0.7rem', color: theme.textSecondary, marginBottom: '0.5rem', fontWeight: 500 }}>
+                      Connected Repositories
+                    </p>
+                    {gitRepos.map(repo => (
+                      <div key={repo.name} style={{
+                        padding: '0.5rem',
+                        backgroundColor: theme.bgTertiary,
+                        borderRadius: '6px',
+                        marginBottom: '0.5rem',
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{repo.name}</div>
+                          <div style={{ fontSize: '0.7rem', color: theme.textSecondary }}>
+                            last commit {getRelativeTime(repo.lastCommitAt)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteGitRepo(repo.name)}
+                          style={{
+                            padding: '4px',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: theme.danger,
+                            cursor: 'pointer',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Setup instructions */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <p style={{ fontSize: '0.7rem', color: theme.textSecondary, marginBottom: '0.5rem', fontWeight: 500 }}>
+                    Add Repository
+                  </p>
+                  <p style={{ fontSize: '0.7rem', color: theme.textSecondary, marginBottom: '0.5rem' }}>
+                    Run this in your repo:
+                  </p>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    backgroundColor: theme.bgTertiary,
+                    borderRadius: '4px',
+                    padding: '0.5rem',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <code style={{
+                      flex: 1,
+                      fontSize: '0.65rem',
+                      wordBreak: 'break-all',
+                      color: theme.textSecondary
+                    }}>
+                      curl -s {api.getHookScriptUrl()} &gt; .git/hooks/post-commit && chmod +x .git/hooks/post-commit
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(`curl -s ${api.getHookScriptUrl()} > .git/hooks/post-commit && chmod +x .git/hooks/post-commit`, 'hook-cmd')}
+                      style={{
+                        padding: '4px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        color: copiedText === 'hook-cmd' ? theme.success : theme.textSecondary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {copiedText === 'hook-cmd' ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: '0.7rem', color: theme.textSecondary, marginBottom: '0.5rem' }}>
+                    Add to shell profile (~/.bashrc or ~/.zshrc):
+                  </p>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    backgroundColor: theme.bgTertiary,
+                    borderRadius: '4px',
+                    padding: '0.5rem'
+                  }}>
+                    <code style={{
+                      flex: 1,
+                      fontSize: '0.65rem',
+                      wordBreak: 'break-all',
+                      color: theme.textSecondary
+                    }}>
+                      export DEVTODO_TOKEN=your-token-here
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard('export DEVTODO_TOKEN=your-token-here', 'token-cmd')}
+                      style={{
+                        padding: '4px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        color: copiedText === 'token-cmd' ? theme.success : theme.textSecondary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {copiedText === 'token-cmd' ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1311,7 +1517,44 @@ function TaskItem({ task, theme, onToggle, onDelete, onEdit, editingTask, onUpda
                   auto-completed
                 </span>
               )}
+
+              {task.completedBy === 'git' && task.gitCommitHash && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  backgroundColor: `${SOURCE_COLORS[SOURCE_TYPES.GIT]}20`,
+                  color: SOURCE_COLORS[SOURCE_TYPES.GIT],
+                  borderRadius: '4px',
+                  fontSize: '0.7rem'
+                }}>
+                  <GitBranch size={12} />
+                  {task.gitCommitHash}
+                </span>
+              )}
             </div>
+
+            {task.completedBy === 'git' && task.gitCommitHash && (
+              <div style={{
+                marginTop: '0.5rem',
+                padding: '0.5rem',
+                backgroundColor: `${SOURCE_COLORS[SOURCE_TYPES.GIT]}10`,
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                color: theme.textSecondary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <GitBranch size={14} color={SOURCE_COLORS[SOURCE_TYPES.GIT]} />
+                <span>
+                  Completed by commit <code style={{ color: SOURCE_COLORS[SOURCE_TYPES.GIT] }}>{task.gitCommitHash}</code>
+                  {task.gitCommitBranch && <> on <strong>{task.gitCommitBranch}</strong></>}
+                  {task.gitCommitRepo && <> ({task.gitCommitRepo})</>}
+                </span>
+              </div>
+            )}
             
             {task.notes && (
               <div style={{

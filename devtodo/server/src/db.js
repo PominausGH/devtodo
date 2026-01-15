@@ -37,6 +37,36 @@ function createDb(dbPath = path.join(__dirname, '../data/devtodo.db')) {
     )
   `);
 
+  // Create git_repos table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS git_repos (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_commit_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Add git completion columns to tasks table (if they don't exist)
+  const columns = db.prepare("PRAGMA table_info(tasks)").all();
+  const columnNames = columns.map(c => c.name);
+
+  if (!columnNames.includes('completed_by')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN completed_by TEXT DEFAULT NULL");
+  }
+  if (!columnNames.includes('git_commit_hash')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN git_commit_hash TEXT DEFAULT NULL");
+  }
+  if (!columnNames.includes('git_commit_repo')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN git_commit_repo TEXT DEFAULT NULL");
+  }
+  if (!columnNames.includes('git_commit_branch')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN git_commit_branch TEXT DEFAULT NULL");
+  }
+  if (!columnNames.includes('git_commit_message')) {
+    db.exec("ALTER TABLE tasks ADD COLUMN git_commit_message TEXT DEFAULT NULL");
+  }
+
   return db;
 }
 
@@ -89,7 +119,7 @@ function getTaskById(db, id) {
 }
 
 function updateTask(db, id, updates) {
-  const allowedFields = ['title', 'completed', 'priority', 'due_date', 'notes', 'completed_at', 'auto_completed'];
+  const allowedFields = ['title', 'completed', 'priority', 'due_date', 'notes', 'completed_at', 'auto_completed', 'completed_by', 'git_commit_hash', 'git_commit_repo', 'git_commit_branch', 'git_commit_message'];
   const setClauses = [];
   const params = [];
 
@@ -102,6 +132,11 @@ function updateTask(db, id, updates) {
     notes: 'notes',
     completedAt: 'completed_at',
     autoCompleted: 'auto_completed',
+    completedBy: 'completed_by',
+    gitCommitHash: 'git_commit_hash',
+    gitCommitRepo: 'git_commit_repo',
+    gitCommitBranch: 'git_commit_branch',
+    gitCommitMessage: 'git_commit_message',
   };
 
   for (const [key, value] of Object.entries(updates)) {
@@ -142,7 +177,51 @@ function formatTask(row) {
     calendarEventId: row.calendar_event_id,
     emailId: row.email_id,
     autoCompleted: Boolean(row.auto_completed),
+    completedBy: row.completed_by,
+    gitCommitHash: row.git_commit_hash,
+    gitCommitRepo: row.git_commit_repo,
+    gitCommitBranch: row.git_commit_branch,
+    gitCommitMessage: row.git_commit_message,
   };
+}
+
+// Git repos functions
+const generateRepoId = () => `repo-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+
+function upsertGitRepo(db, name) {
+  const existing = db.prepare('SELECT * FROM git_repos WHERE name = ?').get(name);
+
+  if (existing) {
+    db.prepare('UPDATE git_repos SET last_commit_at = datetime("now") WHERE name = ?').run(name);
+    return db.prepare('SELECT * FROM git_repos WHERE name = ?').get(name);
+  } else {
+    const id = generateRepoId();
+    db.prepare('INSERT INTO git_repos (id, name) VALUES (?, ?)').run(id, name);
+    return db.prepare('SELECT * FROM git_repos WHERE id = ?').get(id);
+  }
+}
+
+function getGitRepos(db) {
+  return db.prepare('SELECT * FROM git_repos ORDER BY last_commit_at DESC').all().map(row => ({
+    id: row.id,
+    name: row.name,
+    firstSeenAt: row.first_seen_at,
+    lastCommitAt: row.last_commit_at,
+  }));
+}
+
+function deleteGitRepo(db, name) {
+  return db.prepare('DELETE FROM git_repos WHERE name = ?').run(name);
+}
+
+function findMatchingTasks(db, commitMessage) {
+  // Find pending tasks where the commit message contains the task title (case-insensitive)
+  const pendingTasks = db.prepare('SELECT * FROM tasks WHERE completed = 0').all();
+
+  const lowerMessage = commitMessage.toLowerCase();
+  return pendingTasks
+    .filter(task => lowerMessage.includes(task.title.toLowerCase()))
+    .map(formatTask);
 }
 
 module.exports = {
@@ -152,4 +231,8 @@ module.exports = {
   getTaskById,
   updateTask,
   deleteTask,
+  upsertGitRepo,
+  getGitRepos,
+  deleteGitRepo,
+  findMatchingTasks,
 };

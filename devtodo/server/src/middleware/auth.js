@@ -1,8 +1,18 @@
+// Public endpoints that don't require authentication
+const PUBLIC_ENDPOINTS = [
+  '/api/git/hook-script',
+];
+
 function authMiddleware(req, res, next) {
   const apiToken = process.env.API_TOKEN;
 
   // If no API_TOKEN is configured, skip auth (development mode)
   if (!apiToken) {
+    return next();
+  }
+
+  // Skip auth for public endpoints
+  if (PUBLIC_ENDPOINTS.includes(req.path)) {
     return next();
   }
 
