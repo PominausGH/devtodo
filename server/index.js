@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const Docker = require('dockerode');
 const { google } = require('googleapis');
 const fs = require('fs').promises;
@@ -10,8 +12,26 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const app = express();
-app.use(cors());
+
+// Security headers
+app.use(helmet());
+
+// CORS configuration
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'https://daintytrading.com',
+    credentials: true
+}));
+
 app.use(express.json());
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -74,7 +94,10 @@ const containerActions = new Map();
 
 // ==================== AUTHENTICATION ====================
 
-const JWT_SECRET = process.env.JWT_SECRET || 'devtodo-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+}
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const TOKENS_DIR = path.join(__dirname, 'tokens');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -121,15 +144,15 @@ const authMiddleware = async (req, res, next) => {
 };
 
 // Register
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (password.length < 12) {
+    return res.status(400).json({ error: 'Password must be at least 12 characters' });
   }
 
   const users = await loadUsers();
@@ -147,7 +170,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {

@@ -1,62 +1,79 @@
-version: '3.8'
-
 services:
-  # Frontend - React App
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "3004:80"
+    - 127.0.0.1:3004:80
     depends_on:
-      - backend
+    - backend
     networks:
-      - devtodo-network
+    - devtodo-network
     restart: unless-stopped
-
-  # Backend - Node.js API
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          pids: 200
+    cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    - NET_BIND_SERVICE
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
     ports:
-      - "3002:3002"
+    - 127.0.0.1:3002:3002
     volumes:
-      # Mount Docker socket for container management
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Mount Claude data folder
-      - /root/.claude:/app/claude-data:ro
-      # Persist Google tokens and user data
-      - devtodo-tokens:/app/tokens
-      - devtodo-data:/app/data
+    - /root/.claude:/app/claude-data:ro
+    - devtodo-tokens:/app/tokens
+    - devtodo-data:/app/data
     environment:
-      - NODE_ENV=production
-      - PORT=3002
-      - DOCKER_SOCKET=/var/run/docker.sock
-      - CLAUDE_DATA_PATH=/app/claude-data
-      - JWT_SECRET=${JWT_SECRET:-devtodo-secret-change-me}
-      - DATA_DIR=/app/data
-      - N8N_API_URL=${N8N_API_URL:-http://172.17.0.1:5678}
-      - N8N_API_KEY=${N8N_API_KEY}
-      # Gmail OAuth
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://daintytrading.com/api/auth/google/callback}
-      # Calendar OAuth (separate account)
-      - GOOGLE_CALENDAR_CLIENT_ID=${GOOGLE_CALENDAR_CLIENT_ID}
-      - GOOGLE_CALENDAR_CLIENT_SECRET=${GOOGLE_CALENDAR_CLIENT_SECRET}
-      - GOOGLE_CALENDAR_REDIRECT_URI=${GOOGLE_CALENDAR_REDIRECT_URI:-https://daintytrading.com/api/auth/google/calendar/callback}
-      # LiteLLM for task summarization
-      - LITELLM_URL=${LITELLM_URL:-http://172.17.0.1:4000}
-      - LITELLM_API_KEY=${LITELLM_API_KEY}
+    - NODE_ENV=production
+    - PORT=3002
+    - DOCKER_SOCKET=/var/run/docker.sock
+    - CLAUDE_DATA_PATH=/app/claude-data
+    - JWT_SECRET=${JWT_SECRET:-devtodo-secret-change-me}
+    - DATA_DIR=/app/data
+    - N8N_API_URL=${N8N_API_URL:-http://172.17.0.1:5678}
+    - N8N_API_KEY=${N8N_API_KEY}
+    - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://daintytrading.com/api/auth/google/callback}
+    - GOOGLE_CALENDAR_CLIENT_ID=${GOOGLE_CALENDAR_CLIENT_ID}
+    - GOOGLE_CALENDAR_CLIENT_SECRET=${GOOGLE_CALENDAR_CLIENT_SECRET}
+    - GOOGLE_CALENDAR_REDIRECT_URI=${GOOGLE_CALENDAR_REDIRECT_URI:-https://daintytrading.com/api/auth/google/calendar/callback}
+    - LITELLM_URL=${LITELLM_URL:-http://172.17.0.1:4000}
+    - LITELLM_API_KEY=${LITELLM_API_KEY}
     networks:
-      - devtodo-network
+    - devtodo-network
     restart: unless-stopped
-
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          pids: 200
+    cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
 networks:
   devtodo-network:
     driver: bridge
-
 volumes:
-  devtodo-tokens:
-  devtodo-data:
+  devtodo-tokens: null
+  devtodo-data: null
