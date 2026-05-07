@@ -47,10 +47,10 @@ services:
     - N8N_API_KEY=${N8N_API_KEY}
     - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-    - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://daintytrading.com/api/auth/google/callback}
+    - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-https://devtodo.daintytrading.com/api/auth/google/callback}
     - GOOGLE_CALENDAR_CLIENT_ID=${GOOGLE_CALENDAR_CLIENT_ID}
     - GOOGLE_CALENDAR_CLIENT_SECRET=${GOOGLE_CALENDAR_CLIENT_SECRET}
-    - GOOGLE_CALENDAR_REDIRECT_URI=${GOOGLE_CALENDAR_REDIRECT_URI:-https://daintytrading.com/api/auth/google/calendar/callback}
+    - GOOGLE_CALENDAR_REDIRECT_URI=${GOOGLE_CALENDAR_REDIRECT_URI:-https://devtodo.daintytrading.com/api/auth/google/calendar/callback}
     - LITELLM_URL=${LITELLM_URL:-http://172.17.0.1:4000}
     - LITELLM_API_KEY=${LITELLM_API_KEY}
     networks:

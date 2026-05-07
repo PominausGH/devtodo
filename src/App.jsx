@@ -43,7 +43,7 @@ const api = {
 
 // Configuration - Update these for your setup
 const CONFIG = {
-  vpsHost: 'daintytrading.com',
+  vpsHost: 'devtodo.daintytrading.com',
   claudeChatsPath: '/mnt/user-data/uploads/claude-chats',
   dockerApiEndpoint: '/api/docker',
   googleCalendarApiEndpoint: '/api/calendar',
